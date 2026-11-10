@@ -1,0 +1,48 @@
+name: Veille juridique (weekly update)
+
+# Every Monday morning (Paris time) this reads the week's news from
+# Service-Public (particuliers + professionnels),
+# keeps what matters to YFIP clients, and rebuilds docs/index.html.
+# GitHub Pages publishes that page; no secrets or Zoho keys are needed.
+
+on:
+  schedule:
+    # 06:23 UTC Monday = 07:23 Paris in winter, 08:23 in summer
+    - cron: '23 6 * * 1'
+  workflow_dispatch: {} # "Run workflow" button in the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: veille
+  cancel-in-progress: false
+
+jobs:
+  update-page:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install feedparser requests beautifulsoup4
+
+      - name: Collect this week's news and rebuild the page
+        run: python policy_digest/collect.py
+
+      - name: Publish (commit the updated page)
+        run: |
+          git config user.name "YFIP veille bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/index.html policy_digest/history.json policy_digest/state.json
+          if git diff --cached --quiet; then
+            echo "Nothing changed."
+          else
+            git commit -m "Veille: mise à jour du $(date -u +%Y-%m-%d)"
+            git push
+          fi
