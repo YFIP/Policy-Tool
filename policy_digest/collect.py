@@ -26,7 +26,14 @@ import requests
 from bs4 import BeautifulSoup
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-UA = "Mozilla/5.0 (compatible; YFIP-policy-watch/1.0)"
+UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
+HEADERS = {
+    "User-Agent": UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/rss+xml,*/*;q=0.8",
+    "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+}
+_browser = None  # started only if a site blocks plain requests
 TIMEOUT = 30
 LOOKBACK_DAYS = 8          # a little over a week, so nothing falls between runs
 MAX_PER_SOURCE = 15
@@ -76,10 +83,47 @@ def short_error(url, exc):
     return f"{url} : {why}"
 
 
+class Page:
+    def __init__(self, content, text):
+        self.content, self.text = content, text
+
+
+def fetch_with_browser(url):
+    """Some government sites (ameli, Interior Ministry) block non-browser
+    requests with HTTP 403. Retry those with a real headless Chrome."""
+    global _browser
+    from playwright.sync_api import sync_playwright
+    if _browser is None:
+        pw = sync_playwright().start()
+        _browser = pw.chromium.launch(executable_path=os.environ.get("CHROME_PATH") or None,
+                                      args=["--disable-blink-features=AutomationControlled"])
+    ctx = _browser.new_context(user_agent=UA, locale="fr-FR")
+    page = ctx.new_page()
+    try:
+        resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(2500)  # let bot checks / scripts finish
+        if resp is not None and resp.status >= 400 and resp.status not in (403,):
+            raise requests.HTTPError(response=type("R", (), {"status_code": resp.status})())
+        html_text = page.content()
+        if resp is not None and resp.status == 403 and len(html_text) < 5000:
+            raise requests.HTTPError(response=type("R", (), {"status_code": 403})())
+        return Page(html_text.encode("utf-8"), html_text)
+    finally:
+        ctx.close()
+
+
 def fetch(url):
-    r = requests.get(url, headers={"User-Agent": UA, "Accept-Language": "fr-FR,fr;q=0.9"}, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        r.raise_for_status()
+        return Page(r.content, r.text)
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code in (401, 403, 406, 429):
+            try:
+                return fetch_with_browser(url)
+            except ImportError:
+                pass
+        raise
 
 
 def read_rss(source, since):
@@ -161,6 +205,7 @@ def main():
     state = load_json(args.state, {"seen": {}, "initialised": []})
 
     all_items, problems, report = [], [], []
+    titles_seen = set()
     for src in sources:
         name = src["name"]
         if src["type"] == "rss":
@@ -180,6 +225,9 @@ def main():
             topics = match_topics(it["title"] + " " + it["summary"], keywords)
             if src.get("keyword_filter") and not topics:
                 continue
+            if norm(it["title"]) in titles_seen:  # same article in two feeds
+                continue
+            titles_seen.add(norm(it["title"]))
             it["source"] = name
             it["topics"] = topics or [src.get("default_topic", "Autre")]
             kept.append(it)
