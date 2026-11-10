@@ -25,6 +25,17 @@ TOPIC_EN = {
 }
 
 
+# Official pages that block automatic reading (Cloudflare); shown as quick links instead.
+ALSO_CHECK = [
+    ("Ministère de l'Intérieur – actualités immigration", "Interior Ministry – immigration news",
+     "https://www.immigration.interieur.gouv.fr/Info-ressources/Actualites/L-actu-immigration"),
+    ("ANEF – démarches en ligne pour les étrangers", "ANEF – online procedures for foreign nationals",
+     "https://administration-etrangers-en-france.interieur.gouv.fr/particuliers/"),
+    ("ameli – actualités des assurés", "ameli – news for insured people",
+     "https://www.ameli.fr/paris/assure/actualites"),
+]
+
+
 def e(text):
     return html.escape(text or "", quote=True)
 
@@ -86,6 +97,11 @@ def render_page(history, now):
     blocks = "".join(week_block(w, i == 0) for i, w in enumerate(weeks)) or (
         '<p class="empty">' + bi("Première mise à jour lundi prochain.", "First update next Monday.") + "</p>")
     updated = date_bi(now.date().isoformat())
+    also = ('<section class="also"><h2>' + bi("À consulter aussi", "Also check") + "</h2><p>"
+            + bi("Ces sites officiels bloquent la lecture automatique : ouvrez-les directement.",
+                 "These official sites block automatic reading: open them directly.") + "</p><ul>"
+            + "".join(f'<li><a href="{e(u)}" target="_blank" rel="noopener">{bi(fr, en)}</a></li>'
+                      for fr, en, u in ALSO_CHECK) + "</ul></section>")
     return f"""<!DOCTYPE html>
 <html lang="fr" data-lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -115,6 +131,9 @@ h3{{font-size:15px;margin:18px 0 8px;color:var(--accent)}}
 .tags{{margin-top:6px}} .tag{{display:inline-block;background:var(--tint);border-radius:4px;padding:1px 7px;font-size:12px;margin-right:4px;color:var(--accent)}}
 .empty{{color:var(--quiet);padding:8px 0 14px}}
 .warn{{background:#fff7e6;border:1px solid #f5d9a8;border-radius:8px;padding:10px 14px;margin:14px 0;font-size:13px}} .warn ul{{margin:4px 0 0;padding-left:18px}}
+.also{{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin-top:6px}}
+.also h2{{font-size:15px;margin:0 0 4px;color:var(--accent)}} .also p{{margin:0 0 6px;font-size:13px;color:var(--quiet)}}
+.also ul{{margin:0;padding-left:18px}} .also a{{color:var(--accent)}}
 footer{{max-width:860px;margin:auto;padding:0 20px 30px;color:var(--quiet);font-size:12px}}
 </style></head><body>
 <header><div class="wrap top"><div>
@@ -124,9 +143,9 @@ footer{{max-width:860px;margin:auto;padding:0 20px 30px;color:var(--quiet);font-
 </div></header>
 <main>
 <p class="note"><span lang="en">News titles and summaries are shown in the original French, as published by the official source.</span></p>
-<div class="chips">{chips}</div>{blocks}</main>
-<footer>{bi("Sources : Service-Public.gouv.fr, ministère de l'Intérieur (immigration, ANEF), ameli.fr. Chaque titre renvoie à la source officielle, qui seule fait foi. Généré automatiquement ; vérifiez toujours la source avant de conseiller un client.",
-            "Sources: Service-Public.gouv.fr, Interior Ministry (immigration, ANEF), ameli.fr. Each title links to the official source, which is the only authoritative version. Generated automatically; always check the source before advising a client.")}</footer>
+<div class="chips">{chips}</div>{blocks}{also}</main>
+<footer>{bi("Source suivie automatiquement : Service-Public.gouv.fr. Chaque titre renvoie à la source officielle, qui seule fait foi. Généré automatiquement ; vérifiez toujours la source avant de conseiller un client.",
+            "Source followed automatically: Service-Public.gouv.fr. Each title links to the official source, which is the only authoritative version. Generated automatically; always check the source before advising a client.")}</footer>
 <script>
 (function(){{
  var root=document.documentElement, saved=null;

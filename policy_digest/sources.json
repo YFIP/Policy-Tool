@@ -18,35 +18,7 @@
         "https://www.service-public.fr/abonnements/rss/actu-actu-pro.rss"
       ],
       "keyword_filter": true
-    },
-    {
-      "name": "Ministère de l'Intérieur – Immigration (dont ANEF)",
-      "type": "page",
-      "urls": [
-        "https://www.immigration.interieur.gouv.fr/Info-ressources/Actualites/L-actu-immigration"
-      ],
-      "link_contains": "/Actualites/",
-      "keyword_filter": false,
-      "default_topic": "Immigration et séjour"
-    },
-    {
-      "name": "Ministère de l'Intérieur – Actualités",
-      "type": "page",
-      "urls": [
-        "https://www.interieur.gouv.fr/actualites"
-      ],
-      "link_contains": "/actualites/",
-      "keyword_filter": true
-    },
-    {
-      "name": "ameli – Actualités assurés",
-      "type": "page",
-      "urls": [
-        "https://www.ameli.fr/paris/assure/actualites"
-      ],
-      "link_contains": "/actualites/",
-      "keyword_filter": false,
-      "default_topic": "Santé et Assurance maladie"
     }
-  ]
+  ],
+  "_note": "The Interior Ministry and ameli news pages are behind Cloudflare bot checks that block GitHub's servers, so they are linked on the page for manual checking instead (see render.py, ALSO_CHECK)."
 }
