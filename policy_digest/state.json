@@ -1,1 +1,8 @@
-{"seen": {}, "initialised": []}
+{
+ "initialised": [],
+ "seen": {
+  "https://entreprendre.service-public.gouv.fr/actualites/A19130?xtor=RSS-111": "2026-11-10",
+  "https://entreprendre.service-public.gouv.fr/actualites/A19130?xtor=RSS-112": "2026-11-10",
+  "https://www.service-public.gouv.fr/particuliers/actualites/A19128?xtor=RSS-111": "2026-11-10"
+ }
+}
