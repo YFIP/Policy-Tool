@@ -1,0 +1,52 @@
+{
+  "_comment": "Sources checked every week. type=rss reads a news feed; type=page reads links from a news page. keyword_filter=true keeps only items matching keywords.json; false keeps everything (the whole source is relevant).",
+  "sources": [
+    {
+      "name": "Service-Public – Particuliers",
+      "type": "rss",
+      "urls": [
+        "https://www.service-public.gouv.fr/abonnements/rss/actu-actualites-particuliers.rss",
+        "https://www.service-public.fr/abonnements/rss/actu-actualites-particuliers.rss"
+      ],
+      "keyword_filter": true
+    },
+    {
+      "name": "Service-Public – Professionnels",
+      "type": "rss",
+      "urls": [
+        "https://www.service-public.gouv.fr/abonnements/rss/actu-actu-pro.rss",
+        "https://www.service-public.fr/abonnements/rss/actu-actu-pro.rss"
+      ],
+      "keyword_filter": true
+    },
+    {
+      "name": "Ministère de l'Intérieur – Immigration (dont ANEF)",
+      "type": "page",
+      "urls": [
+        "https://www.immigration.interieur.gouv.fr/Info-ressources/Actualites/L-actu-immigration"
+      ],
+      "link_contains": "/Actualites/",
+      "keyword_filter": false,
+      "default_topic": "Immigration et séjour"
+    },
+    {
+      "name": "Ministère de l'Intérieur – Actualités",
+      "type": "page",
+      "urls": [
+        "https://www.interieur.gouv.fr/actualites"
+      ],
+      "link_contains": "/actualites/",
+      "keyword_filter": true
+    },
+    {
+      "name": "ameli – Actualités assurés",
+      "type": "page",
+      "urls": [
+        "https://www.ameli.fr/paris/assure/actualites"
+      ],
+      "link_contains": "/actualites/",
+      "keyword_filter": false,
+      "default_topic": "Santé et Assurance maladie"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "_comment": "An item is kept if its title or summary contains any of these (accents and capitals ignored). Edit freely.",
+  "Immigration et séjour": ["titre de sejour", "carte de sejour", "visa", "etranger", "naturalisation", "nationalite francaise", "anef", "prefecture", "asile", "carte de resident", "passeport talent", "regroupement familial", "ofii", "contrat d'integration", "recepisse", "autorisation de travail", "ceseda", "immigration"],
+  "Santé et Assurance maladie": ["cpam", "assurance maladie", "ameli", "carte vitale", "puma", "protection universelle maladie", "complementaire sante", "mutuelle", "medecin traitant", "remboursement", "securite sociale"],
+  "Impôts": ["impot", "impots", "declaration de revenus", "prelevement a la source", "taxe d'habitation", "taxe fonciere", "numero fiscal", "dgfip"],
+  "Logement": ["logement", "bail", "location", "locataire", "loyer", "apl", "caution", "etat des lieux", "dpe", "proprietaire"],
+  "Travail et entreprise": ["urssaf", "micro-entrepreneur", "auto-entrepreneur", "france travail", "contrat de travail", "salarie", "retraite", "smic", "creation d'entreprise", "siret"],
+  "Famille et vie quotidienne": ["caf", "allocations familiales", "permis de conduire", "echange de permis", "scolarite", "banque", "compte bancaire", "etat civil"]
+}
