@@ -33,6 +33,10 @@ jobs:
         run: pip install feedparser requests beautifulsoup4
 
       - name: Collect this week's news and rebuild the page
+        env:
+          LEGIFRANCE_CLIENT_ID: ${{ secrets.LEGIFRANCE_CLIENT_ID }}
+          LEGIFRANCE_CLIENT_SECRET: ${{ secrets.LEGIFRANCE_CLIENT_SECRET }}
+          LEGIFRANCE_ENV: ${{ vars.LEGIFRANCE_ENV || 'production' }}
         run: python policy_digest/collect.py
 
       - name: Publish (commit the updated page)
