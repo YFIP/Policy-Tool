@@ -1,0 +1,495 @@
+From b88b3fddc3ccd640daeab8d8ab2a1a3e6b050c75 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 15 Nov 2026 19:18:37 -0500
+Subject: [PATCH] =?UTF-8?q?Add=20L=C3=A9gifrance=20(Journal=20officiel)=20?=
+ =?UTF-8?q?as=20a=20weekly=20source=20via=20the=20PISTE=20API?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+New laws and ordinances are always listed; decrees and arrêtés when they
+match keywords.json. Individual measures (appointments, naturalisation
+lists) are excluded. Needs LEGIFRANCE_CLIENT_ID / LEGIFRANCE_CLIENT_SECRET
+repository secrets; skipped cleanly until they are set.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EiB2AmpndN5GYGRkQvCU9J
+---
+ .github/workflows/veille.yml |  13 +-
+ .gitignore                   |   1 +
+ README.md                    |  26 +++-
+ policy_digest/collect.py     |  24 +++-
+ policy_digest/legifrance.py  | 234 +++++++++++++++++++++++++++++++++++
+ policy_digest/render.py      |   7 +-
+ policy_digest/sources.json   |  40 +++++-
+ 7 files changed, 331 insertions(+), 14 deletions(-)
+ create mode 100644 .gitignore
+ create mode 100644 policy_digest/legifrance.py
+
+diff --git a/.github/workflows/veille.yml b/.github/workflows/veille.yml
+index 782d812..d73b9f3 100644
+--- a/.github/workflows/veille.yml
++++ b/.github/workflows/veille.yml
+@@ -1,9 +1,12 @@
+ name: Veille juridique (weekly update)
+ 
+ # Every Monday morning (Paris time) this reads the week's news from
+-# Service-Public (particuliers + professionnels),
+-# keeps what matters to YFIP clients, and rebuilds docs/index.html.
+-# GitHub Pages publishes that page; no secrets or Zoho keys are needed.
++# Service-Public (particuliers + professionnels) and the Journal officiel
++# (Légifrance API), keeps what matters to YFIP clients, and rebuilds
++# docs/index.html, which Netlify publishes.
++# Légifrance needs two repository secrets (Settings > Secrets and variables >
++# Actions): LEGIFRANCE_CLIENT_ID and LEGIFRANCE_CLIENT_SECRET, from piste.gouv.fr.
++# Without them the Légifrance source is simply skipped.
+ 
+ on:
+   schedule:
+@@ -33,6 +36,10 @@ jobs:
+         run: pip install feedparser requests beautifulsoup4
+ 
+       - name: Collect this week's news and rebuild the page
++        env:
++          LEGIFRANCE_CLIENT_ID: ${{ secrets.LEGIFRANCE_CLIENT_ID }}
++          LEGIFRANCE_CLIENT_SECRET: ${{ secrets.LEGIFRANCE_CLIENT_SECRET }}
++          LEGIFRANCE_ENV: ${{ vars.LEGIFRANCE_ENV || secrets.LEGIFRANCE_ENV || 'production' }}
+         run: python policy_digest/collect.py
+ 
+       - name: Publish (commit the updated page)
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..c18dd8d
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1 @@
++__pycache__/
+diff --git a/README.md b/README.md
+index 20629db..0ba4baf 100644
+--- a/README.md
++++ b/README.md
+@@ -5,17 +5,35 @@ A bilingual (FR/EN toggle) web page listing each week's official news relevant t
+ updated automatically every Monday morning (Paris time).
+ 
+ **Sources:** Service-Public.gouv.fr (particuliers + professionnels),
+-ministère de l'Intérieur (immigration, ANEF, actualités), ameli.fr.
+-Légifrance can be added later via the PISTE API.
++the Journal officiel via the Légifrance API (new laws, ordinances, and
++relevant decrees/arrêtés), plus quick links to the Interior Ministry and ameli.fr.
+ 
+ ## How it works
+ `.github/workflows/veille.yml` runs `policy_digest/collect.py` every Monday.
+ It reads the sources, keeps new items matching `policy_digest/keywords.json`,
+-and rebuilds `docs/index.html`, which GitHub Pages publishes.
++and rebuilds `docs/index.html`, which Netlify publishes (see `netlify.toml`).
++
++## Légifrance (Journal officiel) setup – one time
++1. Create an account on https://piste.gouv.fr and log in.
++2. Under *Applications*, create an application (sandbox is fine to start, then production).
++3. In the *API* catalogue, subscribe that application to **Légifrance** and accept the terms (CGU).
++4. Copy the application's **OAuth client_id** and **client_secret**.
++5. In this GitHub repo: *Settings > Secrets and variables > Actions > New repository secret*:
++   `LEGIFRANCE_CLIENT_ID` and `LEGIFRANCE_CLIENT_SECRET`.
++   (Using sandbox keys? Also add a *variable* or secret `LEGIFRANCE_ENV` = `sandbox`.)
++6. *Actions > Veille juridique > Run workflow* to test. The run log shows a
++   `✓ Légifrance – Journal officiel` line with how many texts were read.
++
++New texts appear in their own section, "Nouveaux textes au Journal officiel",
++tagged with any client topic they match. What's kept is set in
++`policy_digest/sources.json`: laws and ordinances always; decrees and arrêtés
++only if they match `keywords.json`; appointments, naturalisation lists and similar
++individual measures are excluded.
+ 
+ ## Changing what it watches
+ - **Topics/keywords:** edit `policy_digest/keywords.json`.
+-- **Sources:** edit `policy_digest/sources.json`.
++- **Sources:** edit `policy_digest/sources.json` (for Légifrance: which natures
++  are always kept, which need a keyword match, and title words to exclude).
+ - **Something not showing?** Check the yellow "Sources non lues" box on the
+   page, or the latest run in the Actions tab.
+ 
+diff --git a/policy_digest/collect.py b/policy_digest/collect.py
+index 4a6f384..017d602 100644
+--- a/policy_digest/collect.py
++++ b/policy_digest/collect.py
+@@ -209,6 +209,9 @@ def read_page(source):
+ 
+ 
+ from render import render_page
++from legifrance import read_legifrance
++
++JO_TOPIC = "Nouveaux textes au Journal officiel"
+ 
+ 
+ def main():
+@@ -232,6 +235,14 @@ def main():
+         name = src["name"]
+         if src["type"] == "rss":
+             items, used_url, error = read_rss(src, since)
++        elif src["type"] == "legifrance":
++            try:
++                items, used_url, error = read_legifrance(src, since, match_topics, keywords, norm)
++            except Exception as exc:
++                items, used_url, error = [], None, short_error("API Légifrance", exc)
++            if error == "SKIP":
++                report.append(f"– {name}: skipped (LEGIFRANCE_CLIENT_ID / LEGIFRANCE_CLIENT_SECRET not set)")
++                continue
+         else:
+             items, used_url, error = read_page(src)
+         if error:
+@@ -244,7 +255,13 @@ def main():
+         for it in items:
+             if not it["link"] or it["link"] in state["seen"]:
+                 continue
+-            topics = match_topics(it["title"] + " " + it["summary"], keywords)
++            if src["type"] == "legifrance":
++                # Already filtered by nature/keywords; every text goes in the JO section,
++                # with the client topics it matches as extra tags for the filters.
++                topics = [JO_TOPIC] + it.pop("matched_topics", [])
++                it.pop("nature", None)
++            else:
++                topics = match_topics(it["title"] + " " + it["summary"], keywords)
+             if src.get("keyword_filter") and not topics:
+                 continue
+             if norm(it["title"]) in titles_seen:  # same article in two feeds
+@@ -261,7 +278,7 @@ def main():
+             state["initialised"].append(name)
+             for link in new_links:
+                 state["seen"].setdefault(link, now.date().isoformat())
+-        kept = kept[:MAX_PER_SOURCE]
++        kept = kept[:src.get("max_items", MAX_PER_SOURCE)]
+         for it in kept:
+             state["seen"][it["link"]] = now.date().isoformat()
+         all_items += kept
+@@ -296,7 +313,8 @@ def main():
+     print("\n".join(report))
+     print(f"\nTotal: {len(all_items)} new item(s) added to the page; {len(problems)} source problem(s).")
+     # Fail only if every source failed: then something is wrong with the run itself.
+-    if sources and len(problems) == len(sources):
++    active = [s for s in sources if not any(r.startswith(f"– {s['name']}:") for r in report)]
++    if active and len(problems) == len(active):
+         sys.exit(1)
+ 
+ 
+diff --git a/policy_digest/legifrance.py b/policy_digest/legifrance.py
+new file mode 100644
+index 0000000..44199aa
+--- /dev/null
++++ b/policy_digest/legifrance.py
+@@ -0,0 +1,234 @@
++"""
++Reads new texts published in the Journal officiel (JORF) through the
++official Légifrance API on PISTE (https://piste.gouv.fr).
++
++Needs two GitHub secrets (see README):
++  LEGIFRANCE_CLIENT_ID, LEGIFRANCE_CLIENT_SECRET
++Optional: LEGIFRANCE_ENV=sandbox to use the PISTE sandbox instead of production.
++
++Two ways of listing the week's texts are tried, in order:
++  1. /search on the JORF collection, filtered by publication date and nature
++  2. /consult/lastNJo + /consult/jorfCont (the tables of contents of the last
++     Journaux officiels), used if the search is refused or returns nothing.
++Results are read defensively (any object carrying a JORFTEXT id is a text),
++so small changes in the API's JSON layout don't break the weekly run.
++"""
++import datetime as dt
++import os
++import re
++import unicodedata
++
++import requests
++
++ENDPOINTS = {
++    "production": ("https://oauth.piste.gouv.fr/api/oauth/token",
++                   "https://api.piste.gouv.fr/dila/legifrance/lf-engine-app"),
++    "sandbox": ("https://sandbox-oauth.piste.gouv.fr/api/oauth/token",
++                "https://sandbox-api.piste.gouv.fr/dila/legifrance/lf-engine-app"),
++}
++TIMEOUT = 40
++PAGE_SIZE = 100
++MAX_PAGES = 10
++
++NATURE_LABEL = {
++    "LOI": "Loi", "LOI_CONSTIT": "Loi constitutionnelle", "LOI_ORGANIQUE": "Loi organique",
++    "ORDONNANCE": "Ordonnance", "DECRET": "Décret", "DECRET_LOI": "Décret-loi",
++    "ARRETE": "Arrêté", "DECISION": "Décision", "CIRCULAIRE": "Circulaire", "AVIS": "Avis",
++}
++
++
++def _plain(text):
++    text = unicodedata.normalize("NFKD", text or "")
++    return "".join(c for c in text if not unicodedata.combining(c)).lower()
++
++
++def nature_from_title(title):
++    """'LOI n° 2026-12 du …' -> LOI, 'Décret n° …' -> DECRET, etc."""
++    t = _plain(title).strip()
++    for prefix, nature in (("loi constitutionnelle", "LOI_CONSTIT"), ("loi organique", "LOI_ORGANIQUE"),
++                           ("loi", "LOI"), ("ordonnance", "ORDONNANCE"), ("decret", "DECRET"),
++                           ("arrete", "ARRETE"), ("decision", "DECISION"), ("circulaire", "CIRCULAIRE"),
++                           ("avis", "AVIS")):
++        if re.match(prefix + r"\b", t):
++            return nature
++    return None
++
++
++def _to_date(value):
++    """API dates come as epoch milliseconds or ISO strings."""
++    if value in (None, ""):
++        return None
++    try:
++        if isinstance(value, (int, float)) or str(value).lstrip("-").isdigit():
++            return dt.datetime.fromtimestamp(int(value) / 1000, dt.timezone.utc).date().isoformat()
++        return dt.date.fromisoformat(str(value)[:10]).isoformat()
++    except (ValueError, OSError, OverflowError):
++        return None
++
++
++def _walk_texts(node, out, context=None):
++    """Collect every object that looks like a JORF text: an id starting with
++    JORFTEXT plus a title. `context` carries the nearest section heading
++    (usually the issuing ministry) from JO tables of contents."""
++    if isinstance(node, dict):
++        heading = node.get("titre") if isinstance(node.get("titre"), str) and "tms" in node else None
++        ctx = heading or context
++        tid = next((node.get(k) for k in ("id", "cid", "textCid", "idTexte")
++                    if isinstance(node.get(k), str) and node.get(k).startswith("JORFTEXT")), None)
++        title = node.get("titre") or node.get("title") or node.get("titreTxt")
++        if tid and isinstance(title, str) and title.strip():
++            out.setdefault(tid, {
++                "id": tid,
++                "title": re.sub(r"<[^>]+>", "", title).strip(),
++                "nature": (node.get("nature") or "").upper() or None,
++                "date": next((_to_date(node.get(k)) for k in ("datePubli", "datePublication", "date_publi",
++                                                             "publicationDate") if node.get(k)), None),
++                "section": context,
++            })
++        for v in node.values():
++            _walk_texts(v, out, ctx)
++    elif isinstance(node, list):
++        for v in node:
++            _walk_texts(v, out, context)
++    return out
++
++
++def _search_results(data):
++    """A /search result row has `titles` (with the JORFTEXT id) and the row's
++    own nature/date; merge them so each text gets all its metadata."""
++    texts = {}
++    for row in data.get("results") or []:
++        found = _walk_texts(row, {})
++        for t in found.values():
++            t["nature"] = t["nature"] or (row.get("nature") or "").upper() or None
++            t["date"] = t["date"] or next((_to_date(row.get(k)) for k in
++                                           ("datePublication", "datePubli", "date", "dateTexte") if row.get(k)), None)
++            texts.setdefault(t["id"], t)
++    return texts
++
++
++class LegifranceClient:
++    def __init__(self, client_id, client_secret, env="production"):
++        self.token_url, self.api = ENDPOINTS.get(env, ENDPOINTS["production"])
++        self.client_id, self.client_secret = client_id, client_secret
++        self.session = requests.Session()
++        self._token = None
++
++    def token(self):
++        if not self._token:
++            r = self.session.post(self.token_url, timeout=TIMEOUT, data={
++                "grant_type": "client_credentials", "client_id": self.client_id,
++                "client_secret": self.client_secret, "scope": "openid"})
++            r.raise_for_status()
++            self._token = r.json()["access_token"]
++        return self._token
++
++    def post(self, path, body):
++        r = self.session.post(self.api + path, json=body, timeout=TIMEOUT, headers={
++            "Authorization": f"Bearer {self.token()}", "Accept": "application/json"})
++        r.raise_for_status()
++        return r.json()
++
++    def search_jorf(self, start, end, natures):
++        """All JORF texts of the given natures published between start and end."""
++        texts = {}
++        for page in range(1, MAX_PAGES + 1):
++            body = {"fond": "JORF", "recherche": {
++                "champs": [{"typeChamp": "ALL", "operateur": "ET", "criteres": [
++                    {"typeRecherche": "TOUS_LES_MOTS_DANS_UN_CHAMP", "valeur": "*", "operateur": "ET"}]}],
++                "filtres": [{"facette": "NATURE", "valeurs": natures},
++                            {"facette": "DATE_PUBLICATION", "dates": {"start": start, "end": end}}],
++                "operateur": "ET", "sort": "DATE_PUBLI_DESC", "typePagination": "DEFAULT",
++                "pageNumber": page, "pageSize": PAGE_SIZE}}
++            data = self.post("/search", body)
++            found = _search_results(data)
++            texts.update(found)
++            total = data.get("totalResultNumber") or 0
++            if len(found) < PAGE_SIZE or page * PAGE_SIZE >= total:
++                break
++        return texts
++
++    def recent_jo_texts(self, start):
++        """Every text in each Journal officiel published since `start`, read
++        from the JO tables of contents."""
++        data = self.post("/consult/lastNJo", {"nbElement": 10})
++        texts = {}
++        for jo in data.get("containers") or []:
++            jo_date = _to_date(jo.get("datePubli") or jo.get("date"))
++            if not jo.get("id") or (jo_date and jo_date < start):
++                continue
++            cont = self.post("/consult/jorfCont", {"id": jo["id"], "pageNumber": 1, "pageSize": 100})
++            for t in _walk_texts(cont, {}).values():
++                t["date"] = t["date"] or jo_date
++                texts.setdefault(t["id"], t)
++        return texts
++
++
++def read_legifrance(source, since, match_topics, keywords, norm):
++    """Returns (items, used_url, error) like the other readers in collect.py.
++    Items not wanted (wrong nature, no keyword match, excluded) are dropped here."""
++    cid = os.environ.get("LEGIFRANCE_CLIENT_ID", "").strip()
++    secret = os.environ.get("LEGIFRANCE_CLIENT_SECRET", "").strip()
++    if not cid or not secret:
++        return [], None, "SKIP"
++    env = os.environ.get("LEGIFRANCE_ENV", source.get("environment", "production")).strip().lower()
++    client = LegifranceClient(cid, secret, env)
++
++    always = [n.upper() for n in source.get("natures_always", ["LOI", "ORDONNANCE"])]
++    if_kw = [n.upper() for n in source.get("natures_if_keyword", ["DECRET"])]
++    exclude = [norm(w) for w in source.get("exclude_title_words", [])]
++    ignore = [norm(p) for p in source.get("ignore_phrases", [])]
++    start, end = since.date().isoformat(), dt.date.today().isoformat()
++
++    method, texts = "search", {}
++    try:
++        texts = client.search_jorf(start, end, always + if_kw)
++    except requests.HTTPError as exc:
++        if exc.response is not None and exc.response.status_code in (401, 403):
++            raise  # bad credentials or API not subscribed: say so, don't hide it
++        texts = {}
++    if not texts:
++        method, texts = "jorfCont", client.recent_jo_texts(start)
++
++    items = []
++    for t in texts.values():
++        nature = (t["nature"] or nature_from_title(t["title"]) or "").upper()
++        if nature.startswith("LOI"):
++            nature_key = "LOI"
++        else:
++            nature_key = nature
++        if nature_key not in always and nature_key not in if_kw:
++            continue
++        if t["date"] and t["date"] < start:
++            continue
++        ntitle = norm(t["title"])
++        # Exclusions only screen decrees/arrêtés: laws and ordinances are always kept.
++        if nature_key not in always and any(x and x in ntitle for x in exclude):
++            continue
++        match_text = t["title"]
++        for p in ignore:
++            match_text = re.sub(re.escape(p), " ", norm(match_text))
++        topics = match_topics(match_text, keywords)
++        if nature_key in if_kw and nature_key not in always and not topics:
++            continue
++        label = NATURE_LABEL.get(nature, nature.title() if nature else "Texte")
++        feminine = nature_key in ("LOI", "ORDONNANCE", "DECISION", "CIRCULAIRE")
++        summary = f"{label} {'publiée' if feminine else 'publié'} au Journal officiel"
++        if t["date"]:
++            d = dt.date.fromisoformat(t["date"])
++            summary += f" du {d.day:02d}/{d.month:02d}/{d.year}"
++        if t.get("section") and not _plain(t["section"]).startswith(("lois", "decrets", "arretes", "ordonnances")):
++            summary += f" · {t['section']}"
++        items.append({
++            "title": t["title"],
++            "link": f"https://www.legifrance.gouv.fr/jorf/id/{t['id']}",
++            "date": t["date"],
++            "summary": summary + ".",
++            "nature": nature_key,
++            "matched_topics": topics,
++        })
++    # Laws first, then ordinances, then the rest; newest first within each.
++    rank = {"LOI": 0, "ORDONNANCE": 1, "DECRET": 2, "ARRETE": 3}
++    items.sort(key=lambda i: (rank.get(i["nature"], 9), -(int((i["date"] or "0").replace("-", "")))))
++    used = f"API Légifrance ({env}, {method}, {len(texts)} textes lus)"
++    return items, used, None
+diff --git a/policy_digest/render.py b/policy_digest/render.py
+index d16aca6..9cad71b 100644
+--- a/policy_digest/render.py
++++ b/policy_digest/render.py
+@@ -12,9 +12,10 @@ MONTHS = {
+     "en": ["January", "February", "March", "April", "May", "June", "July",
+            "August", "September", "October", "November", "December"],
+ }
+-TOPIC_ORDER = ["Immigration et séjour", "Santé et Assurance maladie", "Impôts", "Logement",
++TOPIC_ORDER = ["Nouveaux textes au Journal officiel", "Immigration et séjour", "Santé et Assurance maladie", "Impôts", "Logement",
+                "Travail et entreprise", "Famille et vie quotidienne", "Autre"]
+ TOPIC_EN = {
++    "Nouveaux textes au Journal officiel": "New laws & decrees (Official Journal)",
+     "Immigration et séjour": "Immigration & residence",
+     "Santé et Assurance maladie": "Health & health insurance",
+     "Impôts": "Taxes",
+@@ -144,8 +145,8 @@ footer{{max-width:860px;margin:auto;padding:0 20px 30px;color:var(--quiet);font-
+ <main>
+ <p class="note"><span lang="en">News titles and summaries are shown in the original French, as published by the official source.</span></p>
+ <div class="chips">{chips}</div>{blocks}{also}</main>
+-<footer>{bi("Source suivie automatiquement : Service-Public.gouv.fr. Chaque titre renvoie à la source officielle, qui seule fait foi. Généré automatiquement ; vérifiez toujours la source avant de conseiller un client.",
+-            "Source followed automatically: Service-Public.gouv.fr. Each title links to the official source, which is the only authoritative version. Generated automatically; always check the source before advising a client.")}</footer>
++<footer>{bi("Sources suivies automatiquement : Service-Public.gouv.fr et le Journal officiel (API Légifrance). Chaque titre renvoie à la source officielle, qui seule fait foi. Généré automatiquement ; vérifiez toujours la source avant de conseiller un client.",
++            "Sources followed automatically: Service-Public.gouv.fr and the Journal officiel (Légifrance API). Each title links to the official source, which is the only authoritative version. Generated automatically; always check the source before advising a client.")}</footer>
+ <script>
+ (function(){{
+  var root=document.documentElement, saved=null;
+diff --git a/policy_digest/sources.json b/policy_digest/sources.json
+index 1fa0593..9cc9829 100644
+--- a/policy_digest/sources.json
++++ b/policy_digest/sources.json
+@@ -18,7 +18,45 @@
+         "https://www.service-public.fr/abonnements/rss/actu-actu-pro.rss"
+       ],
+       "keyword_filter": true
++    },
++    {
++      "name": "Légifrance – Journal officiel",
++      "type": "legifrance",
++      "_comment": "New texts published in the Journal officiel, via the PISTE API (needs the LEGIFRANCE_CLIENT_ID / LEGIFRANCE_CLIENT_SECRET secrets). Laws and ordinances are always shown; decrees and arrêtés only if they match keywords.json. Titles containing an exclude_title_words entry (individual appointments, naturalisation lists…) are dropped.",
++      "natures_always": [
++        "LOI",
++        "ORDONNANCE"
++      ],
++      "natures_if_keyword": [
++        "DECRET",
++        "ARRETE"
++      ],
++      "exclude_title_words": [
++        "portant naturalisation",
++        "nomination",
++        "portant delegation de signature",
++        "cessation de fonctions",
++        "tableau d'avancement",
++        "liste d'aptitude",
++        "admission a la retraite",
++        "portant promotion",
++        "portant affectation",
++        "jury",
++        "concours",
++        "elevation",
++        "citation a l'ordre",
++        "attribution de la medaille",
++        "habilitation"
++      ],
++      "ignore_phrases": [
++        "visant",
++        "affaires etrangeres",
++        "europe et des affaires etrangeres"
++      ],
++      "keyword_filter": false,
++      "max_items": 40,
++      "environment": "production"
+     }
+   ],
+   "_note": "The Interior Ministry and ameli news pages are behind Cloudflare bot checks that block GitHub's servers, so they are linked on the page for manual checking instead (see render.py, ALSO_CHECK)."
+-}
+\ No newline at end of file
++}
+-- 
+2.43.0
+
