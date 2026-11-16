@@ -18,6 +18,44 @@
         "https://www.service-public.fr/abonnements/rss/actu-actu-pro.rss"
       ],
       "keyword_filter": true
+    },
+    {
+      "name": "Légifrance – Journal officiel",
+      "type": "legifrance",
+      "_comment": "New texts published in the Journal officiel, via the PISTE API (needs the LEGIFRANCE_CLIENT_ID / LEGIFRANCE_CLIENT_SECRET secrets). Laws and ordinances are always shown; decrees and arrêtés only if they match keywords.json. Titles containing an exclude_title_words entry (individual appointments, naturalisation lists…) are dropped.",
+      "natures_always": [
+        "LOI",
+        "ORDONNANCE"
+      ],
+      "natures_if_keyword": [
+        "DECRET",
+        "ARRETE"
+      ],
+      "exclude_title_words": [
+        "portant naturalisation",
+        "nomination",
+        "portant delegation de signature",
+        "cessation de fonctions",
+        "tableau d'avancement",
+        "liste d'aptitude",
+        "admission a la retraite",
+        "portant promotion",
+        "portant affectation",
+        "jury",
+        "concours",
+        "elevation",
+        "citation a l'ordre",
+        "attribution de la medaille",
+        "habilitation"
+      ],
+      "ignore_phrases": [
+        "visant",
+        "affaires etrangeres",
+        "europe et des affaires etrangeres"
+      ],
+      "keyword_filter": false,
+      "max_items": 40,
+      "environment": "production"
     }
   ],
   "_note": "The Interior Ministry and ameli news pages are behind Cloudflare bot checks that block GitHub's servers, so they are linked on the page for manual checking instead (see render.py, ALSO_CHECK)."

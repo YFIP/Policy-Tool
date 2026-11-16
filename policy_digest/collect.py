@@ -209,6 +209,9 @@ def read_page(source):
 
 
 from render import render_page
+from legifrance import read_legifrance
+
+JO_TOPIC = "Nouveaux textes au Journal officiel"
 
 
 def main():
@@ -232,6 +235,14 @@ def main():
         name = src["name"]
         if src["type"] == "rss":
             items, used_url, error = read_rss(src, since)
+        elif src["type"] == "legifrance":
+            try:
+                items, used_url, error = read_legifrance(src, since, match_topics, keywords, norm)
+            except Exception as exc:
+                items, used_url, error = [], None, short_error("API Légifrance", exc)
+            if error == "SKIP":
+                report.append(f"– {name}: skipped (LEGIFRANCE_CLIENT_ID / LEGIFRANCE_CLIENT_SECRET not set)")
+                continue
         else:
             items, used_url, error = read_page(src)
         if error:
@@ -244,7 +255,13 @@ def main():
         for it in items:
             if not it["link"] or it["link"] in state["seen"]:
                 continue
-            topics = match_topics(it["title"] + " " + it["summary"], keywords)
+            if src["type"] == "legifrance":
+                # Already filtered by nature/keywords; every text goes in the JO section,
+                # with the client topics it matches as extra tags for the filters.
+                topics = [JO_TOPIC] + it.pop("matched_topics", [])
+                it.pop("nature", None)
+            else:
+                topics = match_topics(it["title"] + " " + it["summary"], keywords)
             if src.get("keyword_filter") and not topics:
                 continue
             if norm(it["title"]) in titles_seen:  # same article in two feeds
@@ -261,7 +278,7 @@ def main():
             state["initialised"].append(name)
             for link in new_links:
                 state["seen"].setdefault(link, now.date().isoformat())
-        kept = kept[:MAX_PER_SOURCE]
+        kept = kept[:src.get("max_items", MAX_PER_SOURCE)]
         for it in kept:
             state["seen"][it["link"]] = now.date().isoformat()
         all_items += kept
@@ -296,7 +313,8 @@ def main():
     print("\n".join(report))
     print(f"\nTotal: {len(all_items)} new item(s) added to the page; {len(problems)} source problem(s).")
     # Fail only if every source failed: then something is wrong with the run itself.
-    if sources and len(problems) == len(sources):
+    active = [s for s in sources if not any(r.startswith(f"– {s['name']}:") for r in report)]
+    if active and len(problems) == len(active):
         sys.exit(1)
 
 

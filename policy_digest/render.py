@@ -12,9 +12,10 @@ MONTHS = {
     "en": ["January", "February", "March", "April", "May", "June", "July",
            "August", "September", "October", "November", "December"],
 }
-TOPIC_ORDER = ["Immigration et séjour", "Santé et Assurance maladie", "Impôts", "Logement",
+TOPIC_ORDER = ["Nouveaux textes au Journal officiel", "Immigration et séjour", "Santé et Assurance maladie", "Impôts", "Logement",
                "Travail et entreprise", "Famille et vie quotidienne", "Autre"]
 TOPIC_EN = {
+    "Nouveaux textes au Journal officiel": "New laws & decrees (Official Journal)",
     "Immigration et séjour": "Immigration & residence",
     "Santé et Assurance maladie": "Health & health insurance",
     "Impôts": "Taxes",
@@ -144,8 +145,8 @@ footer{{max-width:860px;margin:auto;padding:0 20px 30px;color:var(--quiet);font-
 <main>
 <p class="note"><span lang="en">News titles and summaries are shown in the original French, as published by the official source.</span></p>
 <div class="chips">{chips}</div>{blocks}{also}</main>
-<footer>{bi("Source suivie automatiquement : Service-Public.gouv.fr. Chaque titre renvoie à la source officielle, qui seule fait foi. Généré automatiquement ; vérifiez toujours la source avant de conseiller un client.",
-            "Source followed automatically: Service-Public.gouv.fr. Each title links to the official source, which is the only authoritative version. Generated automatically; always check the source before advising a client.")}</footer>
+<footer>{bi("Sources suivies automatiquement : Service-Public.gouv.fr et le Journal officiel (API Légifrance). Chaque titre renvoie à la source officielle, qui seule fait foi. Généré automatiquement ; vérifiez toujours la source avant de conseiller un client.",
+            "Sources followed automatically: Service-Public.gouv.fr and the Journal officiel (Légifrance API). Each title links to the official source, which is the only authoritative version. Generated automatically; always check the source before advising a client.")}</footer>
 <script>
 (function(){{
  var root=document.documentElement, saved=null;
