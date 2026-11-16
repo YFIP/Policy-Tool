@@ -1,6 +1,36 @@
 {
  "weeks": [
   {
+   "start": "2026-11-09",
+   "end": "2026-11-16",
+   "items": [
+    {
+     "title": "Prime de transport versée au salarié : le plafond d’exonération est revalorisé temporairement",
+     "link": "https://www.service-public.gouv.fr/particuliers/actualites/A18926?xtor=RSS-111",
+     "date": "2026-11-12",
+     "summary": "Pour aider les salariés face à l’augmentation des prix des carburants, le Gouvernement avait annoncé au mois de septembre une hausse du plafond de la « prime carburant ». Deux décrets parus le 21 octobre 2026 confirment le relèvement temporaire de la limite d’exonération des indemnités de transport…",
+     "source": "Service-Public – Particuliers",
+     "topics": [
+      "Travail et entreprise"
+     ]
+    },
+    {
+     "title": "France Identité génère un justificatif d'identité utile pour vos démarches administratives",
+     "link": "https://www.service-public.gouv.fr/particuliers/actualites/A17697?xtor=RSS-111",
+     "date": "2026-11-11",
+     "summary": "Ouvrir un compte en banque, constituer un dossier de location, effectuer des démarches administratives… Vous pouvez, via l’application France Identité, générer un justificatif d’identité qui remplace la photocopie de la pièce d’identité demandée. Service Public vous explique.",
+     "source": "Service-Public – Particuliers",
+     "topics": [
+      "Logement",
+      "Famille et vie quotidienne"
+     ]
+    }
+   ],
+   "problems": [
+    "Légifrance – Journal officiel (API Légifrance : erreur HTTP 403)"
+   ]
+  },
+  {
    "start": "2026-11-03",
    "end": "2026-11-10",
    "items": [
