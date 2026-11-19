@@ -3,7 +3,7 @@ name: Veille juridique (weekly update)
 # Every Monday morning (Paris time) this reads the week's news from
 # Service-Public (particuliers + professionnels),
 # keeps what matters to YFIP clients, and rebuilds docs/index.html.
-# GitHub Pages publishes that page; no secrets or Zoho keys are needed.
+# Netlify publishes that page. Secrets: Légifrance (PISTE) keys and ANTHROPIC_API_KEY for summaries.
 
 on:
   schedule:
@@ -21,7 +21,7 @@ concurrency:
 jobs:
   update-page:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -30,13 +30,14 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install feedparser requests beautifulsoup4
+        run: pip install -r requirements.txt
 
       - name: Collect this week's news and rebuild the page
         env:
           LEGIFRANCE_CLIENT_ID: ${{ secrets.LEGIFRANCE_CLIENT_ID }}
           LEGIFRANCE_CLIENT_SECRET: ${{ secrets.LEGIFRANCE_CLIENT_SECRET }}
           LEGIFRANCE_ENV: ${{ vars.LEGIFRANCE_ENV || 'production' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python policy_digest/collect.py
 
       - name: Publish (commit the updated page)
