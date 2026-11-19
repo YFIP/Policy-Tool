@@ -20,6 +20,8 @@ import unicodedata
 
 import requests
 
+import summarize
+
 ENDPOINTS = {
     "production": ("https://oauth.piste.gouv.fr/api/oauth/token",
                    "https://api.piste.gouv.fr/dila/legifrance/lf-engine-app"),
@@ -107,6 +109,35 @@ def _search_results(data):
     return texts
 
 
+def _strip(html_text):
+    text = re.sub(r"<br\s*/?>|</p>|</li>", "\n", html_text or "")
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"[ \t\xa0]+", " ", text)
+    return re.sub(r"\n\s*\n+", "\n\n", text).strip()
+
+
+def _articles(node, out):
+    """Every article's text, in order, from a /consult/jorf reply."""
+    if isinstance(node, dict):
+        for art in node.get("articles") or []:
+            body = _strip(art.get("content") or art.get("texte") or "")
+            if body:
+                out.append((f"Article {art['num']}\n" if art.get("num") else "") + body)
+        for sec in node.get("sections") or []:
+            if isinstance(sec, dict) and sec.get("title"):
+                out.append(_strip(sec["title"]))
+            _articles(sec, out)
+    return out
+
+
+def text_parts(doc):
+    """(notice, full_text) from a /consult/jorf reply. The notice is the short
+    official summary decrees carry (Publics concernés / Objet / Entrée en vigueur)."""
+    notice = _strip(doc.get("notice") or "")
+    parts = [notice] + _articles(doc, [])
+    return notice, "\n\n".join(p for p in parts if p)
+
+
 class LegifranceClient:
     def __init__(self, client_id, client_secret, env="production"):
         self.token_url, self.api = ENDPOINTS.get(env, ENDPOINTS["production"])
@@ -147,6 +178,10 @@ class LegifranceClient:
             if len(found) < PAGE_SIZE or page * PAGE_SIZE >= total:
                 break
         return texts
+
+    def get_text(self, text_id):
+        """Full content of one JORF text (notice, visas, articles)."""
+        return self.post("/consult/jorf", {"textCid": text_id})
 
     def recent_jo_texts(self, start):
         """Every text in each Journal officiel published since `start`, read
@@ -190,7 +225,25 @@ def read_legifrance(source, since, match_topics, keywords, norm):
     if not texts:
         method, texts = "jorfCont", client.recent_jo_texts(start)
 
-    items = []
+    # Seville's areas (sources.json "area_keywords"). When set, EVERY text -
+    # laws included - must match one of them; client-topic keywords are not used.
+    areas = source.get("area_keywords") or None
+    area_kw = {k: v for k, v in (areas or {}).items() if not k.startswith("_")}
+    check_text_natures = [n.upper() for n in source.get("check_full_text_natures", ["LOI", "ORDONNANCE", "DECRET"])]
+    max_summaries = int(source.get("max_summaries", 25))
+    use_ai = summarize.available()
+    cache = {}
+
+    def full_text(tid):
+        if tid not in cache:
+            try:
+                cache[tid] = text_parts(client.get_text(tid))
+            except Exception as exc:  # one unreadable text shouldn't stop the run
+                print(f"   [legifrance] could not read {tid}: {exc}")
+                cache[tid] = ("", "")
+        return cache[tid]
+
+    candidates = []
     for t in texts.values():
         nature = (t["nature"] or nature_from_title(t["title"]) or "").upper()
         if nature.startswith("LOI"):
@@ -202,15 +255,28 @@ def read_legifrance(source, since, match_topics, keywords, norm):
         if t["date"] and t["date"] < start:
             continue
         ntitle = norm(t["title"])
-        # Exclusions only screen decrees/arrêtés: laws and ordinances are always kept.
-        if nature_key not in always and any(x and x in ntitle for x in exclude):
+        # Exclusions screen every nature when areas are set; otherwise only decrees/arrêtés.
+        if (area_kw or nature_key not in always) and any(x and x in ntitle for x in exclude):
             continue
         match_text = t["title"]
         for p in ignore:
             match_text = re.sub(re.escape(p), " ", norm(match_text))
-        topics = match_topics(match_text, keywords)
-        if nature_key in if_kw and nature_key not in always and not topics:
-            continue
+        if area_kw:
+            topics = match_topics(match_text, area_kw)
+            if not topics and nature_key in check_text_natures:
+                # Title too vague? Check the official notice (objet, publics concernés).
+                notice, _ = full_text(t["id"])
+                topics = match_topics(notice, area_kw)
+            if not topics:
+                continue
+        else:
+            topics = match_topics(match_text, keywords)
+            if nature_key in if_kw and nature_key not in always and not topics:
+                continue
+        candidates.append((t, nature, nature_key, topics))
+
+    items, dropped = [], []
+    for n, (t, nature, nature_key, topics) in enumerate(candidates):
         label = NATURE_LABEL.get(nature, nature.title() if nature else "Texte")
         feminine = nature_key in ("LOI", "ORDONNANCE", "DECISION", "CIRCULAIRE")
         summary = f"{label} {'publiée' if feminine else 'publié'} au Journal officiel"
@@ -219,16 +285,35 @@ def read_legifrance(source, since, match_topics, keywords, norm):
             summary += f" du {d.day:02d}/{d.month:02d}/{d.year}"
         if t.get("section") and not _plain(t["section"]).startswith(("lois", "decrets", "arretes", "ordonnances")):
             summary += f" · {t['section']}"
-        items.append({
+        item = {
             "title": t["title"],
             "link": f"https://www.legifrance.gouv.fr/jorf/id/{t['id']}",
             "date": t["date"],
             "summary": summary + ".",
             "nature": nature_key,
             "matched_topics": topics,
-        })
+        }
+        if area_kw and n < max_summaries:
+            notice, body = full_text(t["id"])
+            if use_ai and body:
+                try:
+                    details = summarize.summarise(t["title"], t["date"], body)
+                    if not details["relevant"]:
+                        dropped.append(t["title"])
+                        continue
+                    item["details"] = {"fr": details["fr"], "en": details["en"]}
+                except Exception as exc:
+                    print(f"   [summary] {t['id']}: {exc}")
+            if "details" not in item and notice:
+                item["summary"] += " " + notice[:900]
+        items.append(item)
+    for title in dropped:
+        print(f"   [summary] dropped as not relevant: {title[:110]}")
+
     # Laws first, then ordinances, then the rest; newest first within each.
     rank = {"LOI": 0, "ORDONNANCE": 1, "DECRET": 2, "ARRETE": 3}
     items.sort(key=lambda i: (rank.get(i["nature"], 9), -(int((i["date"] or "0").replace("-", "")))))
-    used = f"API Légifrance ({env}, {method}, {len(texts)} textes lus)"
+    used = (f"API Légifrance ({env}, {method}, {len(texts)} textes lus, "
+            f"{len(candidates)} dans les domaines suivis, {len(dropped)} écartés par le résumé"
+            f"{'' if use_ai else ', résumés IA désactivés: ANTHROPIC_API_KEY absent'})")
     return items, used, None

@@ -24,11 +24,18 @@ and rebuilds `docs/index.html`, which Netlify publishes (see `netlify.toml`).
 6. *Actions > Veille juridique > Run workflow* to test. The run log shows a
    `✓ Légifrance – Journal officiel` line with how many texts were read.
 
-New texts appear in their own section, "Nouveaux textes au Journal officiel",
-tagged with any client topic they match. What's kept is set in
-`policy_digest/sources.json`: laws and ordinances always; decrees and arrêtés
-only if they match `keywords.json`; appointments, naturalisation lists and similar
-individual measures are excluded.
+New texts appear in their own section, "Nouveaux textes au Journal officiel".
+A text is kept only if its title or official notice matches one of the four
+areas in `sources.json` → `area_keywords` (droit des étrangers / CESEDA,
+ressortissants étrangers, droit du travail, sécurité sociale). Individual
+measures, drug lists, collective-agreement extensions etc. are excluded.
+
+## AI summaries – one time
+Add a repository secret `ANTHROPIC_API_KEY`. Each kept text is then summarised
+in French and English: what changes, who it affects, when it applies, and how
+it affects YFIP. Texts with no practical effect are dropped. Without the key,
+the page shows the official notice instead. The page also lists exactly what
+is watched ("Ce que nous suivons sur Légifrance").
 
 ## Changing what it watches
 - **Topics/keywords:** edit `policy_digest/keywords.json`.

@@ -12,10 +12,15 @@ MONTHS = {
     "en": ["January", "February", "March", "April", "May", "June", "July",
            "August", "September", "October", "November", "December"],
 }
-TOPIC_ORDER = ["Nouveaux textes au Journal officiel", "Immigration et séjour", "Santé et Assurance maladie", "Impôts", "Logement",
+TOPIC_ORDER = ["Nouveaux textes au Journal officiel", "Droit des étrangers / CESEDA", "Ressortissants étrangers",
+               "Droit du travail", "Sécurité sociale", "Immigration et séjour", "Santé et Assurance maladie", "Impôts", "Logement",
                "Travail et entreprise", "Famille et vie quotidienne", "Autre"]
 TOPIC_EN = {
     "Nouveaux textes au Journal officiel": "New laws & decrees (Official Journal)",
+    "Droit des étrangers / CESEDA": "Immigration law / CESEDA",
+    "Ressortissants étrangers": "Foreign nationals",
+    "Droit du travail": "Employment law",
+    "Sécurité sociale": "Social security",
     "Immigration et séjour": "Immigration & residence",
     "Santé et Assurance maladie": "Health & health insurance",
     "Impôts": "Taxes",
@@ -55,10 +60,40 @@ def topic_bi(t):
     return bi(t, TOPIC_EN.get(t, t))
 
 
+LABELS = {
+    "changes": ("Ce qui change", "What changes"),
+    "who": ("Qui est concerné", "Who it affects"),
+    "when": ("Quand", "When it applies"),
+    "for_us": ("Ce que ça change pour nous", "How this affects us"),
+}
+
+
+def details_block(details):
+    """The structured summary of a Journal officiel text, in FR and EN."""
+    out = []
+    for lang, i in (("fr", 0), ("en", 1)):
+        d = details.get(lang) or {}
+        html_ = [f'<p class="gist">{e(d.get("gist"))}</p>'] if d.get("gist") else []
+        for key in ("changes", "who", "when", "for_us"):
+            val = d.get(key)
+            if not val:
+                continue
+            html_.append(f'<div class="lbl">{e(LABELS[key][i])}</div>')
+            if isinstance(val, list):
+                html_.append("<ul>" + "".join(f"<li>{e(v)}</li>" for v in val if v) + "</ul>")
+            else:
+                html_.append(f"<p>{e(val)}</p>")
+        out.append(f'<div class="bl details" lang="{lang}">{"".join(html_)}</div>')
+    return "".join(out)
+
+
 def card(item):
     topics = "".join(f'<span class="tag">{topic_bi(t)}</span>' for t in item.get("topics", []))
     date = f' · {date_bi(item["date"])}' if item.get("date") else ""
-    summary = f'<p class="sum">{e(item["summary"])}</p>' if item.get("summary") else ""
+    if item.get("details"):
+        summary = details_block(item["details"])
+    else:
+        summary = f'<p class="sum">{e(item["summary"])}</p>' if item.get("summary") else ""
     data_topics = e("|".join(item.get("topics", [])))
     return (f'<article class="item" data-topics="{data_topics}">'
             f'<a class="title" lang="fr" href="{e(item["link"])}" target="_blank" rel="noopener">{e(item["title"])}</a>'
@@ -90,7 +125,35 @@ def week_block(week, open_):
             f'<span class="count">{count}</span></summary>{"".join(body)}</details>')
 
 
-def render_page(history, now):
+def watch_block(watch):
+    """'What we watch on Légifrance' - so the team can see exactly what is searched."""
+    if not watch or not watch.get("area_keywords"):
+        return ""
+    areas = {k: v for k, v in watch["area_keywords"].items() if not k.startswith("_")}
+    nat = {"LOI": ("lois", "laws"), "ORDONNANCE": ("ordonnances", "ordinances"),
+           "DECRET": ("décrets", "decrees"), "ARRETE": ("arrêtés", "arrêtés")}
+    codes = watch.get("natures_always", []) + watch.get("natures_if_keyword", [])
+    nat_fr = ", ".join(nat.get(c, (c.lower(),))[0] for c in codes)
+    nat_en = ", ".join(nat.get(c, (c.lower(), c.lower()))[1] for c in codes)
+    rows = "".join(f'<li><strong>{topic_bi(a)}</strong> : <span class="kw">{e(", ".join(kw))}</span></li>'
+                   for a, kw in areas.items())
+    excl = e(", ".join(watch.get("exclude_title_words", [])))
+    return ('<section class="also"><h2>' + bi("Ce que nous suivons sur Légifrance", "What we watch on Légifrance")
+            + "</h2><p>" + bi("Chaque lundi : les textes publiés au Journal officiel des 8 derniers jours ("
+                              + nat_fr + "), gardés seulement s'ils touchent un de ces domaines "
+                              "(titre ou notice officielle) :",
+                              "Every Monday: texts published in the Journal officiel over the last 8 days ("
+                              + nat_en + "), kept only if they touch one of these areas "
+                              "(title or official notice):")
+            + f"</p><ul>{rows}</ul><p>"
+            + bi("Écartés d'office (titres contenant) : ", "Always left out (titles containing): ")
+            + f'<span class="kw">{excl}</span></p><p>'
+            + bi("Les résumés sont rédigés par IA à partir du texte officiel, qui seul fait foi.",
+                 "Summaries are written by AI from the official text, which is the only authoritative version.")
+            + "</p></section>")
+
+
+def render_page(history, now, watch=None):
     weeks = history.get("weeks", [])
     topics = [t for t in TOPIC_ORDER if any(t in it.get("topics", []) for w in weeks for it in w["items"])]
     chips = '<button class="chip on" data-t="">' + bi("Tout", "All") + "</button>" + "".join(
@@ -110,7 +173,8 @@ def render_page(history, now):
 <style>
 :root{{--ink:#1f2937;--quiet:#6b7280;--line:#e5e7eb;--bg:#f8fafc;--accent:#1f3a5f;--tint:#eef2f7}}
 *{{box-sizing:border-box}} body{{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5}}
-html[data-lang="fr"] span[lang="en"], html[data-lang="en"] span[lang="fr"]{{display:none}}
+html[data-lang="fr"] span[lang="en"], html[data-lang="en"] span[lang="fr"],
+html[data-lang="fr"] .bl[lang="en"], html[data-lang="en"] .bl[lang="fr"]{{display:none}}
 header{{background:var(--accent);color:#fff;padding:28px 20px}} .wrap{{max-width:860px;margin:auto}}
 .top{{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}}
 h1{{margin:0;font-size:24px}} .sub{{opacity:.85;margin-top:4px;font-size:14px}}
@@ -129,6 +193,10 @@ h3{{font-size:15px;margin:18px 0 8px;color:var(--accent)}}
 .item{{border-top:1px solid var(--line);padding:12px 0}} .item.hide{{display:none}}
 .title{{color:var(--ink);font-weight:600;text-decoration:none}} .title:hover{{text-decoration:underline}}
 .meta{{color:var(--quiet);font-size:13px;margin-top:2px}} .sum{{margin:6px 0 0;font-size:14px}}
+.details{{margin:8px 0 0;font-size:14px;background:var(--tint);border-radius:8px;padding:10px 14px}}
+.details .gist{{margin:0 0 6px;font-weight:600}} .details .lbl{{font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.03em;margin-top:8px}}
+.details p{{margin:2px 0}} .details ul{{margin:2px 0;padding-left:18px}} .kw{{color:var(--quiet);font-size:13px}}
+.also + .also{{margin-top:14px}}
 .tags{{margin-top:6px}} .tag{{display:inline-block;background:var(--tint);border-radius:4px;padding:1px 7px;font-size:12px;margin-right:4px;color:var(--accent)}}
 .empty{{color:var(--quiet);padding:8px 0 14px}}
 .warn{{background:#fff7e6;border:1px solid #f5d9a8;border-radius:8px;padding:10px 14px;margin:14px 0;font-size:13px}} .warn ul{{margin:4px 0 0;padding-left:18px}}
@@ -143,8 +211,8 @@ footer{{max-width:860px;margin:auto;padding:0 20px 30px;color:var(--quiet);font-
 <div class="lang" role="group" aria-label="Language / Langue"><button data-l="fr">FR</button><button data-l="en">EN</button></div>
 </div></header>
 <main>
-<p class="note"><span lang="en">News titles and summaries are shown in the original French, as published by the official source.</span></p>
-<div class="chips">{chips}</div>{blocks}{also}</main>
+<p class="note"><span lang="en">News titles are shown in the original French. Journal officiel summaries are available in English.</span></p>
+<div class="chips">{chips}</div>{blocks}{watch_block(watch)}{also}</main>
 <footer>{bi("Sources suivies automatiquement : Service-Public.gouv.fr et le Journal officiel (API Légifrance). Chaque titre renvoie à la source officielle, qui seule fait foi. Généré automatiquement ; vérifiez toujours la source avant de conseiller un client.",
             "Sources followed automatically: Service-Public.gouv.fr and the Journal officiel (Légifrance API). Each title links to the official source, which is the only authoritative version. Generated automatically; always check the source before advising a client.")}</footer>
 <script>

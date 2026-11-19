@@ -22,7 +22,68 @@
     {
       "name": "Légifrance – Journal officiel",
       "type": "legifrance",
-      "_comment": "New texts published in the Journal officiel, via the PISTE API (needs the LEGIFRANCE_CLIENT_ID / LEGIFRANCE_CLIENT_SECRET secrets). Laws and ordinances are always shown; decrees and arrêtés only if they match keywords.json. Titles containing an exclude_title_words entry (individual appointments, naturalisation lists…) are dropped.",
+      "_comment": "New texts published in the Journal officiel, via the PISTE API (secrets LEGIFRANCE_CLIENT_ID / LEGIFRANCE_CLIENT_SECRET). A text is kept only if its title, or its official notice, matches one of the area_keywords below (Seville's list). Titles containing an exclude_title_words entry are dropped. Each kept text is then summarised by AI (secret ANTHROPIC_API_KEY), which also drops texts with no practical effect for YFIP.",
+      "area_keywords": {
+        "_comment": "Accents and capitals are ignored. Edit freely.",
+        "Droit des étrangers / CESEDA": [
+          "code de l'entree et du sejour des etrangers",
+          "ceseda",
+          "sejour des etrangers",
+          "titre de sejour",
+          "carte de sejour",
+          "carte de resident",
+          "visa",
+          "passeport talent",
+          "regroupement familial",
+          "asile",
+          "ofii",
+          "contrat d'integration",
+          "nationalite francaise",
+          "immigration",
+          "anef",
+          "titres de sejour",
+          "cartes de sejour",
+          "cartes de resident",
+          "visas",
+          "droit au sejour"
+        ],
+        "Ressortissants étrangers": [
+          "ressortissant",
+          "ressortissants",
+          "etrangers",
+          "travailleur etranger",
+          "travailleurs etrangers",
+          "autorisation de travail"
+        ],
+        "Droit du travail": [
+          "code du travail",
+          "droit du travail",
+          "contrat de travail",
+          "salarie",
+          "salaries",
+          "smic",
+          "duree du travail",
+          "conge",
+          "licenciement",
+          "teletravail",
+          "rupture conventionnelle",
+          "detachement",
+          "contrats de travail",
+          "conges"
+        ],
+        "Sécurité sociale": [
+          "code de la securite sociale",
+          "securite sociale",
+          "assurance maladie",
+          "protection universelle maladie",
+          "puma",
+          "carte vitale",
+          "cotisations sociales",
+          "affiliation",
+          "complementaire sante",
+          "indemnites journalieres"
+        ]
+      },
       "natures_always": [
         "LOI",
         "ORDONNANCE"
@@ -30,6 +91,11 @@
       "natures_if_keyword": [
         "DECRET",
         "ARRETE"
+      ],
+      "check_full_text_natures": [
+        "LOI",
+        "ORDONNANCE",
+        "DECRET"
       ],
       "exclude_title_words": [
         "portant naturalisation",
@@ -46,7 +112,15 @@
         "elevation",
         "citation a l'ordre",
         "attribution de la medaille",
-        "habilitation"
+        "habilitation",
+        "francisation",
+        "liste des personnes autorisees a exercer",
+        "specialites pharmaceutiques",
+        "preparations magistrales",
+        "portant extension",
+        "parcours de consolidation des competences",
+        "medicaments",
+        "rapportant un decret de naturalisation"
       ],
       "ignore_phrases": [
         "visant",
@@ -55,6 +129,7 @@
       ],
       "keyword_filter": false,
       "max_items": 40,
+      "max_summaries": 25,
       "environment": "production"
     }
   ],

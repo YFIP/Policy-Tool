@@ -4,7 +4,7 @@ Weekly legal & policy watch for YFIP.
 Collects the past week's news from French government sources (see
 sources.json), keeps what is relevant to YFIP's clients (keywords.json),
 and writes:
-  - docs/index.html : the web page the team opens (published by GitHub Pages)
+  - docs/index.html : the web page the team opens (published by Netlify)
   - history.json    : every item reported, by week (the page shows 12 weeks)
   - state.json      : links already reported, so nothing appears twice
 
@@ -304,7 +304,7 @@ def main():
 
     os.makedirs(os.path.dirname(os.path.abspath(args.page)), exist_ok=True)
     with open(args.page, "w", encoding="utf-8") as f:
-        f.write(render_page(history, now))
+        f.write(render_page(history, now, watch=next((s for s in sources if s["type"] == "legifrance"), None)))
     with open(args.history, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=1)
     with open(args.state, "w", encoding="utf-8") as f:
