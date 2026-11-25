@@ -1,6 +1,33 @@
 {
  "weeks": [
   {
+   "start": "2026-11-18",
+   "end": "2026-11-25",
+   "items": [
+    {
+     "title": "Légalisation ou apostille d’un document établi à l’étranger : un nouveau simulateur vous renseigne",
+     "link": "https://www.service-public.gouv.fr/particuliers/actualites/A19153?xtor=RSS-111",
+     "date": "2026-11-23",
+     "summary": "Acte de naissance, acte de mariage, jugement de divorce, diplôme... Vous devez parfois fournir un acte public établi à l’étranger pour effectuer une démarche. Selon le pays d’émission, ce document nécessite d’être authentifié par une légalisation ou par une apostille. Service Public met à…",
+     "source": "Service-Public – Particuliers",
+     "topics": [
+      "Immigration et séjour"
+     ]
+    },
+    {
+     "title": "Ce qui change en décembre 2026",
+     "link": "https://www.service-public.gouv.fr/particuliers/actualites/A17882?xtor=RSS-111",
+     "date": "2026-11-23",
+     "summary": "Santé, finances, logement, congés... Service Public fait le point sur les nouveautés de ce mois de décembre.",
+     "source": "Service-Public – Particuliers",
+     "topics": [
+      "Logement"
+     ]
+    }
+   ],
+   "problems": []
+  },
+  {
    "start": "2026-11-16",
    "end": "2026-11-23",
    "items": [],
